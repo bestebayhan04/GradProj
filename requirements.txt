@@ -3,3 +3,12 @@ langchain
 chromadb # Vector storage
 pytest
 boto3
+openai-whisper
+faster-whisper
+moviepy
+ffmpeg-python
+langchain
+langchain-chroma
+langchain-community
+python-docx
+python-pptx

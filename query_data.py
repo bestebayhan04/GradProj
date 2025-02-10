@@ -34,11 +34,15 @@ def query_rag(query_text: str):
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
 
     # Search the DB.
-    results = db.similarity_search_with_score(query_text, k=5)
+    results = db.similarity_search_with_score(query_text, k=10)
+    
+    filtered_results = sorted(results, key=lambda x: x[1], reverse=True)[:5]
+    filtered_results = [doc for doc, score in filtered_results if score > 0.4]
 
-    if not results:
-        print("No relevant context found in the database.")
+    if not filtered_results:
+        print("No highly relevant context found.")
         return
+
 
     context_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results])
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)

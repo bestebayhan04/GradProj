@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import subprocess
-import whisper
+#import whisper
 from faster_whisper import WhisperModel  # Import faster-whisper
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
