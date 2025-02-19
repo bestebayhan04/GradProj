@@ -1,0 +1,46 @@
+.homepage {
+    display: flex;
+    align-items: center;
+    gap: 100px;
+    height: 100%;
+
+    .mainClass {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        text-align: center;
+
+        h1{
+            font-size: 128px;
+            background: linear-gradient(to right, #217bfe,#ffffff);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+         h2 {
+            font-size: 32px;
+            max-width: 80%;
+            word-wrap: break-word; 
+            margin: 0 auto; 
+            line-height: 1.2;
+        }
+
+        a{
+            padding: 15px 25px;
+            background-color: #217bfe;
+            color: #ffffff;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-top: 20px;
+
+            &:hover{
+                background-color: #ffffff;
+                color: #217bfe;
+            }
+        }
+    }
+}

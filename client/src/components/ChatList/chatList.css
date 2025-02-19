@@ -1,0 +1,74 @@
+.chatList {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+
+    hr {
+        border: none;
+        height: 2px;
+        background-color: #ddd;
+        opacity: 0.1;
+        border-radius: 5px;
+        margin: 20px 0px;
+    }
+
+    .title {
+        font-weight: 600;
+        font-size: 15px;
+        margin-bottom: 10px;
+    }
+
+    .list {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 5px;
+        max-height: calc(100vh - 150px);
+        scroll-behavior: smooth;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+    }
+
+    a {
+        padding: 10px;
+        border-radius: 10px;
+        text-decoration: none;
+        color: inherit;
+        flex: 1;
+
+        &:hover {
+            background-color: #2c2937;
+            color: #fff;
+        }
+    }
+
+    /* ✅ Added styles for delete button */
+    .chatItem {
+        display: flex;
+        align-items: center;
+        justify-content: space-between; 
+        padding: 10px;
+        border-radius: 10px;
+        position: relative;
+    }
+
+    .chatItem:hover {
+        background-color: #2c2937;
+        color: #fff;
+    }
+
+    .deleteChatBtn {
+        background: none;
+        border: none;
+        color: #675656;
+        font-size: 20px;
+        cursor: pointer;
+        transition: color 0.2s ease-in-out;
+        margin-left: 10px;
+    }
+
+    .deleteChatBtn:hover {
+        color: red;
+    }
+}
