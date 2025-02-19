@@ -3,3 +3,6 @@
 backup
 chroma
 .venv/new_one/lib/python3.11/site-packages/
+node_modules/
+new_one/
+.venv/
