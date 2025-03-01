@@ -6,3 +6,4 @@ chroma
 node_modules/
 new_one/
 .venv/
+.env

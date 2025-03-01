@@ -1,8 +1,6 @@
 import './newPrompt.css'; 
 import { useEffect, useRef, useState } from 'react';
 import model from "../../lib/gemini";
-import queryLlama from "../../lib/llama";
-import queryMistral from "../../lib/mistral";
 import Markdown from "react-markdown";
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -103,12 +101,6 @@ const NewPrompt = ({ data }) => {
 
         switch (selectedModel) {
          
-          case "llama":
-            accumulatedText = await queryLlama(text);
-            break;
-          case "mistral":
-            accumulatedText = await queryMistral(text);
-            break;
           default:
             if (!chat) throw new Error("Gemini chat model is not initialized properly.");
             const result = await chat.sendMessageStream(text);
@@ -155,8 +147,6 @@ const NewPrompt = ({ data }) => {
           {/* Model Selector Dropdown (Now includes RAG) */}
           <select className="model-selector" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
             <option value="gemini">Gemini</option>
-            <option value="llama">LLaMA</option>
-            <option value="mistral">Mistral</option>
             <option value="rag">RAG Model</option>
           </select>
 

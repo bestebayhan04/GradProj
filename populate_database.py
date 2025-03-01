@@ -154,7 +154,7 @@ def load_video(video_url):
 
     # Use yt-dlp to extract audio URL without downloading
     command = [
-        "./.venv/bin/yt-dlp", 
+        "./new_one/bin/yt-dlp", 
         "--get-url", 
         "--extract-audio", 
         "--audio-format", 
