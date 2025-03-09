@@ -1,9 +1,13 @@
 import './chatList.css';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from 'react';
+
+const courses = ["CS 201", "CS 204", "CS 210", "CS 301", "CS 303"];
 
 const ChatList = () => {
   const queryClient = useQueryClient();
+  const [selectedCourse, setSelectedCourse] = useState("");
 
   const { isPending, error, data } = useQuery({
     queryKey: ['userChats'],
@@ -13,7 +17,6 @@ const ChatList = () => {
       }).then((res) => res.json()),
   });
 
-  // ✅ Delete chat mutation
   const deleteChatMutation = useMutation({
     mutationFn: async (chatId) => {
       return fetch(`${import.meta.env.VITE_API_URL}/api/chats/${chatId}`, {
@@ -32,9 +35,25 @@ const ChatList = () => {
   return (
     <div className='chatList'>
       <span className="title">DASHBOARD</span>
-      <Link to="/dashboard">+New Chat</Link>
-      <Link to="/">Explore SU AI</Link>
-      <Link to="/">Report Issue</Link>
+
+      {/* Course Selection Dropdown */}
+      <select 
+        value={selectedCourse} 
+        onChange={(e) => setSelectedCourse(e.target.value)} 
+        className="courseSelect"
+      >
+        <option value="">Select Course</option>
+        {courses.map((course) => (
+          <option key={course} value={course}>{course}</option>
+        ))}
+      </select>
+
+      {/* New Chat button */}
+      <Link to="/dashboard" className="button">+New Chat</Link>
+
+      {/* Admin Page button (Same style as New Chat) */}
+      <Link to="/dashboard/admin" className="button">Admin Page</Link>
+
       <hr />
       <span className="title">RECENT CHATS</span>
       <div className='list'>
