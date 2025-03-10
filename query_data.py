@@ -10,10 +10,11 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_community.llms.ollama import Ollama
 from langchain_ollama import OllamaLLM
 from llama_cpp import Llama
-from transformers import BertTokenizer, BertForSequenceClassification
 from dotenv import load_dotenv
 from get_embedding_function import get_embedding_function
 
+# Enable Metal GPU acceleration for Ollama on Mac
+os.environ["OLLAMA_ACCELERATOR"] = "metal"
 # Load environment variables from .env file
 load_dotenv()
 
@@ -142,7 +143,9 @@ def query_rag(query_text: str):
         prompt = prompt_template.format(context=context_text, question=query_text)
         
         # Get response from model
-        model = OllamaLLM(model="mistral")
+        #model = OllamaLLM(model="mistral")
+        model = OllamaLLM(model="llama3.1:8b")
+
         response_text = model.invoke(prompt)
         
         # Format sources

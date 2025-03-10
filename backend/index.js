@@ -8,6 +8,9 @@ import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node'
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from "multer";
+import fs from "fs";
+
 
 dotenv.config();
 const port = process.env.PORT || 5137;
@@ -25,6 +28,9 @@ app.use(
 );
 
 app.use(express.json())
+
+app.use('/data', express.static(path.join(__dirname, '../data')));
+
 const connect = async ()=>{
     try {
         await mongoose.connect(process.env.MONGO)
@@ -33,6 +39,99 @@ const connect = async ()=>{
         console.log(err)
     }
 }
+// **🔹 Define File Schema and Model inside index.js**
+const fileSchema = new mongoose.Schema({
+    name: String,
+    path: String,
+    uploadedAt: { type: Date, default: Date.now },
+  });
+  
+  const File = mongoose.model("File", fileSchema);
+  
+
+// Define the storage configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadPath = path.join(__dirname, "../data"); 
+        fs.mkdirSync(uploadPath, { recursive: true }); // Ensure the folder exists
+        cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+        cb(null, file.originalname); // Preserve original filename
+    },
+});
+
+const upload = multer({ storage });
+
+// File Upload Endpoint
+// File Upload Endpoint (Updated)
+app.post("/api/upload", upload.array("files"), async (req, res) => {
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    try {
+        // Fetch existing file names from the database
+        const existingFiles = await File.find({}, "name");
+        const existingFileNames = new Set(existingFiles.map(file => file.name));
+
+        const newFiles = [];
+        const alreadyExists = [];
+
+        for (const file of req.files) {
+            if (existingFileNames.has(file.originalname)) {
+                alreadyExists.push(file.originalname); // Store duplicate file names
+            } else {
+                newFiles.push({
+                    name: file.originalname,
+                    path: `data/${file.originalname}`,
+                });
+            }
+        }
+
+        if (newFiles.length > 0) {
+            await File.insertMany(newFiles); // Save only new files in MongoDB
+        }
+
+        res.status(200).json({
+            message: alreadyExists.length > 0 ? "Some files already exist" : "Files uploaded successfully",
+            files: newFiles,
+            duplicates: alreadyExists,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error saving files", error });
+    }
+});
+
+
+
+
+
+// **🔹 Fetch All Files from the Database**
+app.get("/api/files", async (req, res) => {
+    try {
+        // Fetch files stored in MongoDB
+        const dbFiles = await File.find({});
+
+        // Fetch files from the data folder
+        const dataFolderPath = path.join(__dirname, "../data");
+
+        // Read files from the folder
+        const folderFiles = fs.readdirSync(dataFolderPath).map((file) => ({
+            name: file,
+            path: `data/${file}`, // Adjust path if needed
+        }));
+
+        // Combine both lists, avoiding duplicates
+        const combinedFiles = [...dbFiles, ...folderFiles.filter(file => !dbFiles.some(dbFile => dbFile.name === file.name))];
+
+        res.status(200).json(combinedFiles);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching files", error });
+    }
+});
+
+
 
 //app.get("/api/test", ClerkExpressRequireAuth(), (req, res) => {
     //const userId= req.auth.userId;
@@ -155,6 +254,111 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req,res)=> {
         res.status(500).send("Error adding conversation!");
     }
 })
+
+// **🔹 Delete File API**
+app.delete("/api/files/:fileName", async (req, res) => {
+    const { fileName } = req.params;
+
+    try {
+        // Check if file exists in the database
+        const file = await File.findOne({ name: fileName });
+
+        if (!file) {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        // Remove the file from MongoDB
+        await File.deleteOne({ name: fileName });
+
+        // Remove the file from the data folder
+        const filePath = path.join(__dirname, "../", file.path);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        res.status(200).json({ message: "File deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Error deleting file", error });
+    }
+});
+
+// API Endpoint to Fetch Video Links
+app.get("/api/video-links", (req, res) => {
+    const videoFilePath = path.join(__dirname, "../data/videos.links");
+  
+    // Check if file exists
+    if (!fs.existsSync(videoFilePath)) {
+      return res.status(404).json({ message: "No video links found" });
+    }
+  
+    // Read and return video links
+    fs.readFile(videoFilePath, "utf8", (err, data) => {
+      if (err) {
+        return res.status(500).json({ message: "Error reading video links", error: err });
+      }
+  
+      const links = data.split("\n").filter((link) => link.trim() !== ""); // Remove empty lines
+      res.status(200).json(links);
+    });
+  });
+
+  // **🔹 Add a New Video Link**
+app.post("/api/video-links", (req, res) => {
+    const { link } = req.body;
+    const videoLinksFilePath = path.join(__dirname, "../data/videos.links");
+
+
+    if (!link) {
+        return res.status(400).json({ message: "Video link is required" });
+    }
+
+    try {
+        // Ensure the file exists before appending
+        if (!fs.existsSync(videoLinksFilePath)) {
+            fs.writeFileSync(videoLinksFilePath, "");
+        }
+
+        // Read existing links
+        const existingLinks = fs.readFileSync(videoLinksFilePath, "utf-8").split("\n").map(l => l.trim());
+
+        if (existingLinks.includes(link)) {
+            return res.status(400).json({ message: "Video link already exists" });
+        }
+
+        // Append new link to the file
+        fs.appendFileSync(videoLinksFilePath, link + "\n");
+        
+        res.status(201).json({ message: "Video link added successfully" });
+    } catch (error) {
+        console.error("Error adding video link:", error);
+        res.status(500).json({ message: "Error adding video link", error });
+    }
+});
+
+// **🔹 Delete a Video Link**
+app.delete("/api/video-links", (req, res) => {
+    const { link } = req.body;
+    const videoLinksFilePath = path.join(__dirname, "../data/videos.links");
+
+
+    try {
+        if (!fs.existsSync(videoLinksFilePath)) {
+            return res.status(404).json({ message: "No video links found" });
+        }
+
+        let links = fs.readFileSync(videoLinksFilePath, "utf-8").split("\n").map(l => l.trim());
+        links = links.filter(l => l !== link); // Remove the specified link
+
+        fs.writeFileSync(videoLinksFilePath, links.join("\n"));
+
+        res.status(200).json({ message: "Video link deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting video link:", error);
+        res.status(500).json({ message: "Error deleting video link", error });
+    }
+});
+
+
 
 app.delete("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
     const userId = req.auth.userId; // Ensure only the chat owner can delete it

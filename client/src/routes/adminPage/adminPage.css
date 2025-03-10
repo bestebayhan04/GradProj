@@ -86,4 +86,200 @@
     border-radius: 5px;
     color: white;
   }
-  
+
+.warning-message {
+  margin-top: 15px;
+  padding: 12px 16px;
+  background-color: rgba(255, 173, 173, 0.2); /* Soft red with transparency */
+  border-left: 4px solid #ff6b6b; /* Subtle left border */
+  border-radius: 8px;
+  color: #ff6b6b; /* Soft red */
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 90%;
+}
+
+.warning-icon {
+  font-size: 18px;
+  color: #ff6b6b;
+}
+
+.warning-message ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.warning-message li {
+  list-style-type: disc;
+}
+
+.file-upload-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.hidden-input {
+  display: none; /* Hides the default input */
+}
+
+.custom-file-button {
+  padding: 10px 20px;
+  background-color: #217bfe;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  display: inline-block;
+  text-align: center;
+}
+
+.custom-file-button:hover {
+  background-color: #1a6be1;
+}
+
+.file-name {
+  font-size: 14px;
+  color: #bbbbbb;
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 10px;
+  margin-bottom: 30px;
+  max-height: 300px; /* Adjust this based on your UI */
+  overflow-y: auto; /* Enables vertical scrolling */
+  border-radius: 6px;
+  border: 1px solid #444; /* Optional: Subtle border */
+  padding: 10px;
+  background: #2c2f36;
+}
+
+/* Style the scrollbar */
+.file-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-list::-webkit-scrollbar-thumb {
+  background-color: #555;
+  border-radius: 4px;
+}
+
+.file-list::-webkit-scrollbar-track {
+  background-color: #222;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Ensures file name stays left, buttons go right */
+  background: #2c2f36;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+}
+
+/* Ensures the file name doesn't shift */
+.file-item a {
+  flex-grow: 1; /* Takes up remaining space */
+  color: #ececec;
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Container to keep View & Remove buttons together */
+.file-actions {
+  display: flex;
+  gap: 8px; /* Adds space between buttons */
+}
+
+/* View Button */
+.view-file-btn {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  margin-right: 20px;
+  gap: 5px;
+  transition: background 0.3s ease;
+}
+
+.view-file-btn:hover {
+  background-color: #45a049;
+}
+
+/* Remove Button */
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: #ff6b6b;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.delete-video-btn {
+  background: none;
+  border: none;
+  color: #ff6b6b;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.3s ease;
+  margin-left: 10px;
+
+}
+
+
+.remove-file-btn:hover {
+  color: #e64545;
+}
+
+.delete-video-btn:hover {
+  color: #e64545;
+}
+
+.video-links-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 15px;
+}
+
+.video-item {
+  background: #2c2f36;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.video-item a {
+  color: #4ea6ff;
+  text-decoration: none;
+}
+
+.video-item a:hover {
+  text-decoration: underline;
+}
+
+.no-videos {
+  font-size: 14px;
+  color: #bbbbbb;
+  margin-top: 10px;
+}
