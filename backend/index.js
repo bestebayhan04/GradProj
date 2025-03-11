@@ -309,25 +309,29 @@ app.delete("/api/files/:course/:fileName", async (req, res) => {
     }
 });
 
-// API Endpoint to Fetch Video Links
-app.get("/api/video-links", (req, res) => {
-    const videoFilePath = path.join(__dirname, "../data/videos.links");
-  
-    // Check if file exists
-    if (!fs.existsSync(videoFilePath)) {
-      return res.status(404).json({ message: "No video links found" });
+app.get("/api/courses/:course/files", async (req, res) => {
+    const { course } = req.params;
+    try {
+        const coursePath = path.join(__dirname, "../data", course);
+        if (!fs.existsSync(coursePath)) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
+        // Read files inside the selected course directory
+        const files = fs.readdirSync(coursePath)
+            .filter(file => file.endsWith(".pdf") || file.endsWith(".docx") || file.endsWith(".pptx") || file.endsWith(".txt"))
+            .map(file => ({
+                name: file,
+                path: `data/${course}/${file}`
+            }));
+
+        res.status(200).json(files);
+    } catch (error) {
+        console.error("Error fetching files:", error);
+        res.status(500).json({ message: "Error fetching files", error });
     }
-  
-    // Read and return video links
-    fs.readFile(videoFilePath, "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).json({ message: "Error reading video links", error: err });
-      }
-  
-      const links = data.split("\n").filter((link) => link.trim() !== ""); // Remove empty lines
-      res.status(200).json(links);
-    });
-  });
+});
+
 
   app.get("/api/courses", async (req, res) => {
     try {
@@ -381,7 +385,7 @@ app.get("/api/filess", async (req, res) => {
             const files = fs.readdirSync(coursePath)
                 .filter(file =>
                     fs.statSync(path.join(coursePath, file)).isFile() && // ✅ Ensure it's a file
-                    file.match(/\.(pdf|docx|pptx|txt)$/i) && // ✅ Only valid file types
+                    file.match(/\.(pdf|docx|doc|pptx|txt)$/i) && // ✅ Only valid file types
                     !excludedItems.includes(file) // ✅ Exclude unwanted entries
                 )
                 .map(file => ({
@@ -403,85 +407,217 @@ app.get("/api/filess", async (req, res) => {
 });
 
 
-app.get("/api/courses/:course/files", async (req, res) => {
-    const { course } = req.params;
+
+// API Endpoint to Fetch Video Links
+app.get("/api/video-links", async (req, res) => {
     try {
-        const coursePath = path.join(__dirname, "../data", course);
-        if (!fs.existsSync(coursePath)) {
-            return res.status(404).json({ message: "Course not found" });
-        }
+        const dataDir = path.join(__dirname, "../data");
+        const courses = fs.readdirSync(dataDir).filter(course =>
+            fs.statSync(path.join(dataDir, course)).isDirectory()
+        );
 
-        // Read files inside the selected course directory
-        const files = fs.readdirSync(coursePath)
-            .filter(file => file.endsWith(".pdf") || file.endsWith(".docx") || file.endsWith(".pptx") || file.endsWith(".txt"))
-            .map(file => ({
-                name: file,
-                path: `data/${course}/${file}`
-            }));
+        let videoMap = new Map(); // Store videos with a list of courses
 
-        res.status(200).json(files);
+        courses.forEach(course => {
+            const videoFilePath = path.join(dataDir, course, "videos.links");
+
+            if (fs.existsSync(videoFilePath)) {
+                const links = fs.readFileSync(videoFilePath, "utf-8").split("\n").filter(link => link.trim() !== "");
+                
+                links.forEach(link => {
+                    if (videoMap.has(link)) {
+                        videoMap.get(link).push(course); // Add course to existing video
+                    } else {
+                        videoMap.set(link, [course]); // Create new video entry
+                    }
+                });
+            }
+        });
+
+        // Convert map to array
+        let allVideoLinks = Array.from(videoMap.entries()).map(([link, courses]) => ({
+            link,
+            courses: courses.join(", ") // Join courses for display
+        }));
+
+        res.status(200).json(allVideoLinks);
     } catch (error) {
-        console.error("Error fetching files:", error);
-        res.status(500).json({ message: "Error fetching files", error });
+        console.error("❌ Error fetching video links:", error);
+        res.status(500).json({ message: "Error fetching video links", error });
     }
 });
 
 
-  // **🔹 Add a New Video Link**
-app.post("/api/video-links", (req, res) => {
-    const { link } = req.body;
-    const videoLinksFilePath = path.join(__dirname, "../data/videos.links");
 
+
+
+app.get("/api/courses/:course/video-links", (req, res) => {
+    const { course } = req.params;
+    const videoFilePath = path.join(__dirname, "../data", course, "videos.links");
+
+    // Check if file exists
+    if (!fs.existsSync(videoFilePath)) {
+        return res.status(404).json({ message: "No video links found for this course" });
+    }
+
+    // Read and return video links as objects (consistent structure)
+    fs.readFile(videoFilePath, "utf8", (err, data) => {
+        if (err) {
+            return res.status(500).json({ message: "Error reading video links", error: err });
+        }
+
+        const links = data
+            .split("\n")
+            .filter((link) => link.trim() !== "")
+            .map((link) => ({ course, link })); // Return as objects with `course` field
+
+        res.status(200).json(links);
+    });
+});
+
+
+
+  // **🔹 Add a New Video Link**
+  app.post("/api/courses/:course/video-links", (req, res) => {
+    const { course } = req.params;
+    const { link } = req.body;
+    const videoFilePath = path.join(__dirname, "../data", course, "videos.links");
 
     if (!link) {
         return res.status(400).json({ message: "Video link is required" });
     }
 
     try {
-        // Ensure the file exists before appending
-        if (!fs.existsSync(videoLinksFilePath)) {
-            fs.writeFileSync(videoLinksFilePath, "");
+        // Ensure the directory and file exist
+        if (!fs.existsSync(path.dirname(videoFilePath))) {
+            fs.mkdirSync(path.dirname(videoFilePath), { recursive: true });
+        }
+        if (!fs.existsSync(videoFilePath)) {
+            fs.writeFileSync(videoFilePath, "");
         }
 
         // Read existing links
-        const existingLinks = fs.readFileSync(videoLinksFilePath, "utf-8").split("\n").map(l => l.trim());
+        let existingLinks = fs.readFileSync(videoFilePath, "utf-8").split("\n").map(l => l.trim());
 
         if (existingLinks.includes(link)) {
             return res.status(400).json({ message: "Video link already exists" });
         }
 
         // Append new link to the file
-        fs.appendFileSync(videoLinksFilePath, link + "\n");
-        
-        res.status(201).json({ message: "Video link added successfully" });
+        existingLinks.push(link);
+        fs.writeFileSync(videoFilePath, existingLinks.join("\n"));
+
+        // ✅ Return updated video list
+        res.status(201).json({ message: "Video link added successfully", links: existingLinks.map(l => ({ course, link: l })) });
+
     } catch (error) {
-        console.error("Error adding video link:", error);
+        console.error("❌ Error adding video link:", error);
         res.status(500).json({ message: "Error adding video link", error });
     }
 });
 
 // **🔹 Delete a Video Link**
-app.delete("/api/video-links", (req, res) => {
+app.delete("/api/courses/:course/video-links", (req, res) => {
+    const { course } = req.params;
     const { link } = req.body;
-    const videoLinksFilePath = path.join(__dirname, "../data/videos.links");
-
+    const videoFilePath = path.join(__dirname, "../data", course, "videos.links");
 
     try {
-        if (!fs.existsSync(videoLinksFilePath)) {
-            return res.status(404).json({ message: "No video links found" });
+        if (!fs.existsSync(videoFilePath)) {
+            return res.status(404).json({ message: "No video links found for this course" });
         }
 
-        let links = fs.readFileSync(videoLinksFilePath, "utf-8").split("\n").map(l => l.trim());
+        let links = fs.readFileSync(videoFilePath, "utf-8").split("\n").map(l => l.trim());
         links = links.filter(l => l !== link); // Remove the specified link
 
-        fs.writeFileSync(videoLinksFilePath, links.join("\n"));
+        fs.writeFileSync(videoFilePath, links.join("\n"));
 
         res.status(200).json({ message: "Video link deleted successfully" });
     } catch (error) {
-        console.error("Error deleting video link:", error);
+        console.error("❌ Error deleting video link:", error);
         res.status(500).json({ message: "Error deleting video link", error });
     }
 });
+app.delete("/api/video-links/all", (req, res) => {
+    const { link } = req.body;
+    const dataDir = path.join(__dirname, "../data");
+
+    try {
+        const courses = fs.readdirSync(dataDir).filter(course =>
+            fs.statSync(path.join(dataDir, course)).isDirectory()
+        );
+
+        let deletedFromCourses = [];
+
+        courses.forEach(course => {
+            const videoFilePath = path.join(dataDir, course, "videos.links");
+
+            if (fs.existsSync(videoFilePath)) {
+                let links = fs.readFileSync(videoFilePath, "utf-8").split("\n").map(l => l.trim());
+
+                if (links.includes(link)) {
+                    links = links.filter(l => l !== link); // Remove the link
+                    fs.writeFileSync(videoFilePath, links.join("\n").trim()); // Trim extra new lines
+                    deletedFromCourses.push(course);
+                }
+            }
+        });
+
+        if (deletedFromCourses.length === 0) {
+            return res.status(404).json({ message: "Video link not found in any course" });
+        }
+
+        res.status(200).json({ 
+            message: "Video link deleted successfully from all courses", 
+            deletedFrom: deletedFromCourses 
+        });
+
+    } catch (error) {
+        console.error("❌ Error deleting video link from all courses:", error);
+        res.status(500).json({ message: "Error deleting video link", error });
+    }
+});
+
+
+app.get("/api/video-links", async (req, res) => {
+    try {
+        const dataDir = path.join(__dirname, "../data");
+        const courses = fs.readdirSync(dataDir).filter(course =>
+            fs.statSync(path.join(dataDir, course)).isDirectory()
+        );
+
+        let videoLinksMap = new Map();
+
+        courses.forEach(course => {
+            const videoFilePath = path.join(dataDir, course, "videos.links");
+
+            if (fs.existsSync(videoFilePath)) {
+                const links = fs.readFileSync(videoFilePath, "utf-8").split("\n").map(l => l.trim());
+                
+                links.forEach(link => {
+                    if (link) { // Avoid empty lines
+                        if (!videoLinksMap.has(link)) {
+                            videoLinksMap.set(link, []);
+                        }
+                        videoLinksMap.get(link).push(course);
+                    }
+                });
+            }
+        });
+
+        // Convert Map to Array
+        const allVideoLinks = Array.from(videoLinksMap.entries()).map(([link, courses]) => ({
+            link,
+            courses, // Always an array
+        }));
+
+        res.status(200).json(allVideoLinks);
+    } catch (error) {
+        console.error("❌ Error fetching video links:", error);
+        res.status(500).json({ message: "Error fetching video links", error });
+    }
+});
+
 
 
 

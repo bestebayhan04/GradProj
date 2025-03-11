@@ -278,6 +278,11 @@
   text-decoration: underline;
 }
 
+.video-course{
+  margin-left: 6px;
+
+}
+
 .no-videos {
   font-size: 14px;
   color: #bbbbbb;

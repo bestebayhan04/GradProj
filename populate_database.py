@@ -8,6 +8,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema.document import Document
 from docx import Document as DocxDocument
+import pypandoc
 from pptx import Presentation 
 from get_embedding_function import get_embedding_function
 from langchain_chroma import Chroma
@@ -70,6 +71,8 @@ def load_documents(directory, skip_sources):
 
         if filename.endswith('.docx'):
             supported_files.extend(load_docx(file_path))
+        elif filename.endswith('.doc'):
+            supported_files.extend(load_doc(file_path))
         elif filename.endswith('.pdf'):
             supported_files.extend(load_pdf(file_path))
         elif filename.endswith('.pptx'):
@@ -99,6 +102,15 @@ def load_docx(file_path):
     print(f"Extracted {len(text)} paragraphs from {file_path}")
     return [Document(page_content="\n".join(text), metadata={"source": file_path})]
 
+def load_doc(file_path):
+    print(f"Attempting to load DOC: {file_path}")
+    try:
+        text = pypandoc.convert_file(file_path, 'plain')
+        print(f"Extracted {len(text.splitlines())} lines from {file_path}")
+        return [Document(page_content=text, metadata={"source": file_path})]
+    except Exception as e:
+        print(f"Error reading DOC file {file_path}: {e}")
+        return []
 
 def load_pptx(file_path):
     print(f"Attempting to load PPTX: {file_path}")

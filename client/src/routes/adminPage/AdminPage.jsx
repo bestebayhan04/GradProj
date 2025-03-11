@@ -65,21 +65,26 @@ const AdminPage = () => {
   // Fetch video links
   useEffect(() => {
     const fetchVideoLinks = async () => {
-      try {
-        const response = await fetch("http://localhost:5137/api/video-links");
-        if (response.ok) {
-          const result = await response.json();
-          setVideoLinks(result);
-        } else {
-          console.error("Failed to fetch video links");
+        try {
+            const endpoint =
+                selectedCourse === "All"
+                    ? "http://localhost:5137/api/video-links" // Fetch all video links
+                    : `http://localhost:5137/api/courses/${selectedCourse}/video-links`; // Fetch video links by course
+
+            const response = await fetch(endpoint);
+            if (response.ok) {
+                const result = await response.json();
+                setVideoLinks(result);
+            } else {
+                console.error("Failed to fetch video links");
+            }
+        } catch (error) {
+            console.error("Error fetching video links:", error);
         }
-      } catch (error) {
-        console.error("Error fetching video links:", error);
-      }
     };
 
     fetchVideoLinks();
-  }, []);
+}, [selectedCourse]);
 
   const handleFileUpload = async (event) => {
     const files = event.target.files;
@@ -120,29 +125,92 @@ const AdminPage = () => {
     }
 };
 
+const handleAddVideoLink = async () => {
+  if (newLink.trim() === "") return;
+
+  try {
+      const endpoint = `http://localhost:5137/api/courses/${selectedCourse}/video-links`;
+
+      const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ link: newLink }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setVideoLinks(prevLinks => [...prevLinks, { course: selectedCourse, link: newLink }]); // ✅ Add immediately
+        setNewLink("");
+      }
+      else {
+          console.error("Failed to add video link");
+      }
+  } catch (error) {
+      console.error("Error adding video link:", error);
+  }
+};
+
 
   // **🔹 Handle File Removal**
-  const handleRemoveFile = async (fileName) => {
+  const handleRemoveVideoLink = async (link, course) => {
     try {
-      // 🔹 If "All" is selected, use the no-course delete endpoint
-      const endpoint = selectedCourse === "All"
-        ? `http://localhost:5137/api/files/${fileName}` // DELETE from any course
-        : `http://localhost:5137/api/files/${selectedCourse}/${fileName}`; // DELETE from specific course
-  
-      const response = await fetch(endpoint, {
-        method: "DELETE",
-      });
-  
-      if (response.ok) {
-        setDocuments((prevDocs) => prevDocs.filter((file) => file.name !== fileName));
-        console.log(`✅ File deleted successfully: ${fileName}`);
-      } else {
-        console.error("❌ Failed to delete file");
-      }
+        const deleteEndpoint =
+            course === "All"
+                ? "http://localhost:5137/api/video-links/all" // 🔹 Delete from all courses
+                : `http://localhost:5137/api/courses/${course}/video-links`; // 🔹 Delete from specific course
+
+        const response = await fetch(deleteEndpoint, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ link }),
+        });
+
+        if (response.ok) {
+            console.log(`✅ Deleted video link: ${link} from ${course}`);
+
+            // ✅ Refetch video links for the selected course to get the latest list
+            const fetchUpdatedLinks = await fetch(
+                course === "All"
+                    ? "http://localhost:5137/api/video-links" // Fetch all videos
+                    : `http://localhost:5137/api/courses/${course}/video-links` // Fetch specific course videos
+            );
+
+            if (fetchUpdatedLinks.ok) {
+                const updatedLinks = await fetchUpdatedLinks.json();
+                setVideoLinks(updatedLinks); // ✅ Update state with the new list
+            } else {
+                console.error("❌ Failed to fetch updated video links");
+            }
+        } else {
+            console.error("❌ Failed to delete video link");
+        }
     } catch (error) {
-      console.error("❌ Error deleting file:", error);
+        console.error("❌ Error deleting video link:", error);
     }
-  };
+};
+
+const handleRemoveFile = async (fileName) => {
+  try {
+    // 🔹 If "All" is selected, use the no-course delete endpoint
+    const endpoint = selectedCourse === "All"
+      ? `http://localhost:5137/api/files/${fileName}` // DELETE from any course
+      : `http://localhost:5137/api/files/${selectedCourse}/${fileName}`; // DELETE from specific course
+
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+    });
+
+    if (response.ok) {
+      setDocuments((prevDocs) => prevDocs.filter((file) => file.name !== fileName));
+      console.log(`✅ File deleted successfully: ${fileName}`);
+    } else {
+      console.error("❌ Failed to delete file");
+    }
+  } catch (error) {
+    console.error("❌ Error deleting file:", error);
+  }
+};
+
   
 
   return (
@@ -232,66 +300,59 @@ const AdminPage = () => {
 
         {activeTab === "videos" && (
           <div className="videosSection">
-            <h2>Video Links</h2>
+            <h2>Video Links ({selectedCourse === "All" ? "All Courses" : selectedCourse})</h2>
 
-            {/* Input Field for Adding Video Links */}
-            <div className="inputContainer">
-              <input type="text" placeholder="Enter video link" value={newLink} onChange={(e) => setNewLink(e.target.value)} />
-              <button onClick={async () => {
-                if (newLink.trim() === "") return;
-                
-                try {
-                  const response = await fetch("http://localhost:5137/api/video-links", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ link: newLink }),
-                  });
+            {/* Input Field for Adding Video Links (Only if a specific course is selected) */}
+            {selectedCourse !== "All" && (
+              <div className="inputContainer">
+                <input 
+                  type="text" 
+                  placeholder="Enter video link" 
+                  value={newLink} 
+                  onChange={(e) => setNewLink(e.target.value)} 
+                />
+                <button onClick={handleAddVideoLink}>
+                  Add
+                </button>
 
-                  if (response.ok) {
-                    setVideoLinks((prevLinks) => [...prevLinks, newLink]);
-                    setNewLink("");
-                  } else {
-                    console.error("Failed to add video link");
-                  }
-                } catch (error) {
-                  console.error("Error adding video link:", error);
-                }
-              }}>
-                Add
-              </button>
-            </div>
+              </div>
+            )}
 
-            {/* Display Existing Video Links BELOW the Input Box */}
+            {/* Display Existing Video Links */}
+            {/* Display Existing Video Links */}
             <ul className="video-links-list">
               {videoLinks.length > 0 ? (
-                videoLinks.map((link, index) => (
+                videoLinks.map((video, index) => (
                   <li key={index} className="video-item">
-                    <a href={link} target="_blank" rel="noopener noreferrer">{link}</a>
-                    <button className="delete-video-btn" onClick={async () => {
-                      try {
-                        const response = await fetch("http://localhost:5137/api/video-links", {
-                          method: "DELETE",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ link }),
-                        });
+                    <a href={video.link} target="_blank" rel="noopener noreferrer">
+                      {video.link}
+                    </a>
 
-                        if (response.ok) {
-                          setVideoLinks((prevLinks) => prevLinks.filter((l) => l !== link));
-                        } else {
-                          console.error("Failed to delete video link");
-                        }
-                      } catch (error) {
-                        console.error("Error deleting video link:", error);
+                    {/* 🔹 Show course names only if "All Courses" is selected */}
+                    {selectedCourse === "All" && (
+                      <span className="video-course">({video.courses})</span>
+                    )}
+
+                    <button
+                      className="delete-video-btn"
+                      onClick={() =>
+                        handleRemoveVideoLink(video.link, selectedCourse === "All" ? "All" : selectedCourse)
                       }
-                    }}>✖</button>
+                    >
+                      ✖
+                    </button>
                   </li>
                 ))
               ) : (
                 <p className="no-videos">No video links available.</p>
               )}
             </ul>
+
+
+
           </div>
         )}
+
       </div>
     </div>
   );
