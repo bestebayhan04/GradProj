@@ -52,82 +52,65 @@ const fileSchema = new mongoose.Schema({
 // Define the storage configuration
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadPath = path.join(__dirname, "../data"); 
-        fs.mkdirSync(uploadPath, { recursive: true }); // Ensure the folder exists
+        const uploadPath = path.join(__dirname, "uploads"); // ✅ Save temporarily in "uploads/"
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname); // Preserve original filename
-    },
+        cb(null, file.originalname); // ✅ Preserve the original filename
+    }
 });
 
-const upload = multer({ storage });
+const upload = multer({ storage: storage });
+
 
 // File Upload Endpoint
 // File Upload Endpoint (Updated)
-app.post("/api/upload", upload.array("files"), async (req, res) => {
+app.post("/api/upload/:course", upload.array("files"), async (req, res) => {
+    const { course } = req.params;
+
     if (!req.files || req.files.length === 0) {
         return res.status(400).json({ message: "No files uploaded" });
     }
 
     try {
-        // Fetch existing file names from the database
-        const existingFiles = await File.find({}, "name");
-        const existingFileNames = new Set(existingFiles.map(file => file.name));
+        const courseDir = path.join(__dirname, "../data", course);
+
+        // ✅ Ensure the course folder exists before moving files
+        if (!fs.existsSync(courseDir)) {
+            fs.mkdirSync(courseDir, { recursive: true });
+        }
 
         const newFiles = [];
         const alreadyExists = [];
 
         for (const file of req.files) {
-            if (existingFileNames.has(file.originalname)) {
-                alreadyExists.push(file.originalname); // Store duplicate file names
+            const tempFilePath = path.join(__dirname, "uploads", file.originalname);
+            const finalFilePath = path.join(courseDir, file.originalname);
+
+            if (fs.existsSync(finalFilePath)) {
+                alreadyExists.push(file.originalname); // ✅ File already exists
             } else {
+                fs.renameSync(tempFilePath, finalFilePath); // ✅ Move from uploads → course folder
                 newFiles.push({
                     name: file.originalname,
-                    path: `data/${file.originalname}`,
+                    path: `data/${course}/${file.originalname}`,
+                    course: course
                 });
             }
-        }
-
-        if (newFiles.length > 0) {
-            await File.insertMany(newFiles); // Save only new files in MongoDB
         }
 
         res.status(200).json({
             message: alreadyExists.length > 0 ? "Some files already exist" : "Files uploaded successfully",
             files: newFiles,
-            duplicates: alreadyExists,
+            duplicates: alreadyExists
         });
+
     } catch (error) {
+        console.error("❌ Error saving files:", error);
         res.status(500).json({ message: "Error saving files", error });
-    }
-});
-
-
-
-
-
-// **🔹 Fetch All Files from the Database**
-app.get("/api/files", async (req, res) => {
-    try {
-        // Fetch files stored in MongoDB
-        const dbFiles = await File.find({});
-
-        // Fetch files from the data folder
-        const dataFolderPath = path.join(__dirname, "../data");
-
-        // Read files from the folder
-        const folderFiles = fs.readdirSync(dataFolderPath).map((file) => ({
-            name: file,
-            path: `data/${file}`, // Adjust path if needed
-        }));
-
-        // Combine both lists, avoiding duplicates
-        const combinedFiles = [...dbFiles, ...folderFiles.filter(file => !dbFiles.some(dbFile => dbFile.name === file.name))];
-
-        res.status(200).json(combinedFiles);
-    } catch (error) {
-        res.status(500).json({ message: "Error fetching files", error });
     }
 });
 
@@ -254,30 +237,74 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req,res)=> {
         res.status(500).send("Error adding conversation!");
     }
 })
-
-// **🔹 Delete File API**
 app.delete("/api/files/:fileName", async (req, res) => {
     const { fileName } = req.params;
 
     try {
-        // Check if file exists in the database
+        const dataDir = path.join(__dirname, "../data");
+
+        // ✅ First, remove from MongoDB (if exists)
         const file = await File.findOne({ name: fileName });
 
-        if (!file) {
-            return res.status(404).json({ message: "File not found" });
+        if (file) {
+            await File.deleteOne({ name: fileName });
         }
 
-        // Remove the file from MongoDB
-        await File.deleteOne({ name: fileName });
+        // ✅ Search for the file inside all course folders
+        let fileDeleted = false;
+        const courses = fs.readdirSync(dataDir).filter(course =>
+            fs.statSync(path.join(dataDir, course)).isDirectory()
+        );
 
-        // Remove the file from the data folder
-        const filePath = path.join(__dirname, "../", file.path);
+        for (const course of courses) {
+            const filePath = path.join(dataDir, course, fileName);
+
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log(`✅ File deleted from ${course}: ${filePath}`);
+                fileDeleted = true;
+            }
+        }
+
+        if (!fileDeleted) {
+            console.warn(`⚠️ File not found: ${fileName}`);
+        }
+
+        res.status(200).json({ message: fileDeleted ? "File deleted successfully" : "File not found" });
+
+    } catch (error) {
+        console.error("❌ Error deleting file:", error);
+        res.status(500).json({ message: "Error deleting file", error });
+    }
+});
+
+// **🔹 Delete File API**
+app.delete("/api/files/:course/:fileName", async (req, res) => {
+    const { course, fileName } = req.params;
+
+    try {
+        const filePath = path.join(__dirname, "../data", course, fileName);
+
+        // ✅ Check if the file exists in MongoDB
+        const file = await File.findOne({ name: fileName, course });
+
+        if (file) {
+            // ✅ Remove from MongoDB
+            await File.deleteOne({ name: fileName, course });
+        }
+
+        // ✅ Remove from the filesystem
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
+            console.log(`✅ File deleted: ${filePath}`);
+        } else {
+            console.warn(`⚠️ File not found: ${filePath}`);
         }
 
         res.status(200).json({ message: "File deleted successfully" });
+
     } catch (error) {
+        console.error("❌ Error deleting file:", error);
         res.status(500).json({ message: "Error deleting file", error });
     }
 });
@@ -301,6 +328,104 @@ app.get("/api/video-links", (req, res) => {
       res.status(200).json(links);
     });
   });
+
+  app.get("/api/courses", async (req, res) => {
+    try {
+        const courseDir = path.join(__dirname, "../data");
+
+        if (!fs.existsSync(courseDir)) {
+            return res.status(404).json({ message: "Data directory not found" });
+        }
+
+        // Define unwanted folders/files
+        const excludedItems = ["videos.links", "GradProject.code-workspace"];
+
+        // Get all course folders except excluded ones
+        const courses = fs.readdirSync(courseDir)
+            .filter(course => {
+                const isDir = fs.statSync(path.join(courseDir, course)).isDirectory();
+                const isExcluded = excludedItems.includes(course);
+                
+                if (isExcluded) console.warn("Skipping unwanted course:", course);
+                
+                return isDir && !isExcluded; // ✅ Only include valid course folders
+            });
+
+        console.log("Filtered Courses:", courses); // Debugging log
+
+        res.status(200).json(courses); // Ensure response is an array
+    } catch (error) {
+        console.error("Error fetching courses:", error);
+        res.status(500).json({ message: "Error fetching courses", error });
+    }
+});
+
+
+app.get("/api/filess", async (req, res) => {
+    try {
+        const dataDir = path.join(__dirname, "../data");
+
+        if (!fs.existsSync(dataDir)) {
+            return res.status(404).json({ message: "Data directory not found" });
+        }
+        // Define unwanted items
+        const excludedItems = ["videos.links", "GradProject.code-workspace", ".DS_Store"];
+
+        const courses = fs.readdirSync(dataDir)
+            .filter(course => fs.statSync(path.join(dataDir, course)).isDirectory() && !excludedItems.includes(course));
+
+        let allFiles = [];
+
+        courses.forEach(course => {
+            const coursePath = path.join(dataDir, course);
+            const files = fs.readdirSync(coursePath)
+                .filter(file =>
+                    fs.statSync(path.join(coursePath, file)).isFile() && // ✅ Ensure it's a file
+                    file.match(/\.(pdf|docx|pptx|txt)$/i) && // ✅ Only valid file types
+                    !excludedItems.includes(file) // ✅ Exclude unwanted entries
+                )
+                .map(file => ({
+                    name: file,
+                    path: `data/${course}/${file}`,
+                    course: course
+                }));
+
+            allFiles = allFiles.concat(files);
+        });
+
+        console.log("✅ Fetched All Valid Files:", allFiles); // Debugging log
+        res.status(200).json(allFiles);
+    } catch (error) {
+        
+        console.error("❌ Error fetching files:", error);
+        res.status(500).json({ message: "Error fetching files", error });
+    }
+});
+
+
+app.get("/api/courses/:course/files", async (req, res) => {
+    const { course } = req.params;
+    try {
+        const coursePath = path.join(__dirname, "../data", course);
+        if (!fs.existsSync(coursePath)) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
+        // Read files inside the selected course directory
+        const files = fs.readdirSync(coursePath)
+            .filter(file => file.endsWith(".pdf") || file.endsWith(".docx") || file.endsWith(".pptx") || file.endsWith(".txt"))
+            .map(file => ({
+                name: file,
+                path: `data/${course}/${file}`
+            }));
+
+        res.status(200).json(files);
+    } catch (error) {
+        console.error("Error fetching files:", error);
+        res.status(500).json({ message: "Error fetching files", error });
+    }
+});
+
 
   // **🔹 Add a New Video Link**
 app.post("/api/video-links", (req, res) => {

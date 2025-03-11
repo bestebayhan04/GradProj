@@ -283,3 +283,27 @@
   color: #bbbbbb;
   margin-top: 10px;
 }
+
+.courseDropdown {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #2c2f36;
+  color: white;
+  border: 1px solid #555;
+  cursor: pointer;
+}
+
+.courseDropdown:focus {
+  outline: none;
+  border-color: #217bfe;
+}
+
+.no-files-message {
+  text-align: center;
+  color: #f2a4a4;
+  font-weight: bold;
+  margin-top: 40px;
+  margin-bottom: 20px;
+
+}
