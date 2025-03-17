@@ -2,6 +2,7 @@ import './chatList.css';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from 'react';
+import eventEmitter from '../../lib/eventEmitter'; // Adjust path as needed
 
 const courses = ["CS 201", "CS 204", "CS 210", "CS 301", "CS 303"];
 
@@ -32,6 +33,14 @@ const ChatList = () => {
     },
   });
 
+  const handleCourseChange = (e) => {
+    const course = e.target.value;
+    setSelectedCourse(course);
+    console.log("📢 Emitting course change:", course); // ✅ Debugging
+    eventEmitter.emit("courseChanged", course);
+  };
+  
+
   return (
     <div className='chatList'>
       <span className="title">DASHBOARD</span>
@@ -39,7 +48,7 @@ const ChatList = () => {
       {/* Course Selection Dropdown */}
       <select 
         value={selectedCourse} 
-        onChange={(e) => setSelectedCourse(e.target.value)} 
+        onChange={handleCourseChange} 
         className="courseSelect"
       >
         <option value="">Select Course</option>

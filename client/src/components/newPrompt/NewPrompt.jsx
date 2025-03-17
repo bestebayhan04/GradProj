@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import model from "../../lib/gemini";
 import Markdown from "react-markdown";
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import eventEmitter from '../../lib/eventEmitter'; // Import event emitter
 
 const NewPrompt = ({ data }) => {
   const [question, setQuestion] = useState("");
@@ -10,25 +11,29 @@ const NewPrompt = ({ data }) => {
   const [selectedModel, setSelectedModel] = useState("gemini");
   const [isThinking, setIsThinking] = useState(false);
   const [sources, setSources] = useState([]);
-
-  let chat;
-  if (selectedModel === "gemini") {
-    chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: "Hello, I have 2 dogs in my house." }] },
-        { role: "model", parts: [{ text: "Great to meet you. What would you like to know?" }] },
-      ],
-    });
-  }
+  const [selectedCourse, setSelectedCourse] = useState(""); // Store selected course
 
   const endRef = useRef(null);
   const formRef = useRef(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const handleCourseChange = (course) => {
+      console.log("🟢 Received course change in NewPrompt:", course); // ✅ Debugging
+      setSelectedCourse(course);
+    };
+  
+    eventEmitter.subscribe("courseChanged", handleCourseChange);
+  
+    return () => {
+      eventEmitter.unsubscribe("courseChanged", handleCourseChange);
+    };
+  }, []);
+  
 
   useEffect(() => {
     endRef.current.scrollIntoView({ behavior: "smooth" });
   }, [data, question, answer]);
-
-  const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -36,7 +41,11 @@ const NewPrompt = ({ data }) => {
         method: "PUT",
         credentials: "include",
         headers: { "Content-type": "application/json" },
-        body: JSON.stringify({ question: question.length ? question : undefined, answer }),
+        body: JSON.stringify({ 
+          question: question.length ? question : undefined, 
+          answer,
+          course: selectedCourse // ✅ Send selected course
+        }),
       }).then(res => res.json());
     },
     onSuccess: () => {
@@ -49,7 +58,7 @@ const NewPrompt = ({ data }) => {
     onError: (err) => console.log(err),
   });
 
-  // ✅ Fixed handleRagQuery to dynamically update answer
+  // ✅ Modify handleRagQuery to include selectedCourse
   const handleRagQuery = async (text) => {
     try {
       console.log('Sending RAG query:', text);
@@ -59,7 +68,7 @@ const NewPrompt = ({ data }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ query: text, course: selectedCourse }), // ✅ Send selected course
       });
 
       if (!response.ok) {
@@ -68,25 +77,20 @@ const NewPrompt = ({ data }) => {
 
       const data = await response.json();
       console.log('Received RAG response:', data);
-      
+
       if (!data.answer) {
         throw new Error('No answer received from RAG');
       }
 
-      setAnswer(data.answer);  // ✅ Only setting the answer
-      console.log('Updated state for RAG:', data.answer);  // ✅ Only logging the answer
-
+      setAnswer(data.answer);
     } catch (error) {
       console.error('RAG query error:', error);
       setAnswer('Error processing your query: ' + error.message);
     }
-};
+  };
 
-
-  // ✅ Restored old streaming behavior in add()
   const add = async (text, isInitial) => {
     if (!isInitial) setQuestion(text);
-    console.log(`Selected Model: ${selectedModel}`);
     
     setAnswer(""); 
     setIsThinking(true);
@@ -95,19 +99,21 @@ const NewPrompt = ({ data }) => {
       if (selectedModel === "rag") {
         await handleRagQuery(text);
       } else {
-        console.log(`Sending request to ${selectedModel} with text: "${text}"`);
-
         let accumulatedText = "";
 
-        switch (selectedModel) {
-         
-          default:
-            if (!chat) throw new Error("Gemini chat model is not initialized properly.");
-            const result = await chat.sendMessageStream(text);
-            for await (const chunk of result.stream) {
-              accumulatedText += chunk.text();
-              setAnswer(accumulatedText); // ✅ Dynamically update answer like old code
-            }
+        if (selectedModel === "gemini") {
+          let chat = model.startChat({
+            history: [
+              { role: "user", parts: [{ text: text }] },
+              { role: "model", parts: [{ text: "Processing..." }] },
+            ],
+          });
+
+          const result = await chat.sendMessageStream(text);
+          for await (const chunk of result.stream) {
+            accumulatedText += chunk.text();
+            setAnswer(accumulatedText);
+          }
         }
 
         setAnswer(accumulatedText);
@@ -125,8 +131,14 @@ const NewPrompt = ({ data }) => {
     e.preventDefault();
     const text = e.target.text.value;
     if (!text) return;
-    add(text, false);
+  
+    // 🚀 Instead of making an API request, just log the payload
+    console.log("Testing JSON Payload:", JSON.stringify({
+      query: text,
+      course: selectedCourse, // Ensure course is included
+    }, null, 2));
   };
+  
 
   const hasRun = useRef(false);
   useEffect(() => {
@@ -160,6 +172,9 @@ const NewPrompt = ({ data }) => {
           </button>
         </form>
       </div>
+
+      {/* Show selected course */}
+      {/*selectedCourse && <p className="selected-course">Current Course: {selectedCourse}</p> */}
 
       {question && (
         <div className="message user">
