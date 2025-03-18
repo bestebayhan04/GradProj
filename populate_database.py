@@ -2,7 +2,6 @@ import argparse
 import os
 import shutil
 import subprocess
-#from langchain_community.document_loaders import PyPDFLoader
 from faster_whisper import WhisperModel  # Import faster-whisper
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -37,7 +36,7 @@ def main():
     except:
         existing_ids = set()
 
-    # Convert chunk IDs -> the full "source" (file path or URL)
+    # Convert chunk IDs -> the full "source" (e.g. data/cs200/monopoly.pdf OR data/cs200/videos.links/https://youtube.com/watch?v=xyz)
     # chunk_id = f"{source}:{page}:{chunk_index}"
     existing_sources = set()
     for cid in existing_ids:
@@ -57,34 +56,54 @@ def main():
 
 def load_documents(directory, skip_sources):
     """
-    Load documents from `directory` unless their file path is in `skip_sources`.
-    For .links, we skip individual links inside the file if they're in `skip_sources`.
+    Recursively walk 'directory' to find files in subfolders.
+    Subfolder names (e.g. 'cs200') become the course name,
+    stored in metadata['course'] for each loaded file.
+    Skips any source that already exists in 'skip_sources'.
     """
-    supported_files = []
-    for filename in os.listdir(directory):
-        file_path = os.path.join(directory, filename)
+    all_documents = []
 
-        # Skip if file path is already in DB
-        if file_path in skip_sources:
-            print(f"Skipping already processed file: {file_path}")
-            continue
+    for root, dirs, files in os.walk(directory):
+        # Determine course name from subfolder relative path
+        # If root == directory, that means top-level 'data' folder (no course).
+        rel_path = os.path.relpath(root, directory)
+        course_name = None if rel_path == "." else rel_path
 
-        if filename.endswith('.docx'):
-            supported_files.extend(load_docx(file_path))
-        elif filename.endswith('.doc'):
-            supported_files.extend(load_doc(file_path))
-        elif filename.endswith('.pdf'):
-            supported_files.extend(load_pdf(file_path))
-        elif filename.endswith('.pptx'):
-            supported_files.extend(load_pptx(file_path))
-        elif filename.endswith('.txt'):
-            supported_files.extend(load_txt(file_path))
-        elif filename.endswith('.links'):
-            supported_files.extend(load_links(file_path, skip_sources))
-        else:
-            print(f"Unsupported file type: {filename}")
+        for filename in files:
+            file_path = os.path.join(root, filename)
 
-    return supported_files
+            # Skip if file path is already in DB
+            # e.g. data/cs200/monopoly.pdf
+            if file_path in skip_sources:
+                print(f"Skipping already processed file: {file_path}")
+                continue
+
+            if filename.endswith('.docx'):
+                docs = load_docx(file_path)
+            elif filename.endswith('.doc'):
+                docs = load_doc(file_path)
+            elif filename.endswith('.pdf'):
+                docs = load_pdf(file_path)
+            elif filename.endswith('.pptx'):
+                docs = load_pptx(file_path)
+            elif filename.endswith('.txt'):
+                docs = load_txt(file_path)
+            elif filename.endswith('.links'):
+                # Process multiple links in a single file
+                docs = load_links(file_path, skip_sources)
+            else:
+                print(f"Unsupported file type: {filename}")
+                docs = []
+
+            # If we loaded any documents, tag them with 'course' in metadata
+            if course_name and docs:
+                for d in docs:
+                    d.metadata["course"] = course_name
+
+            # Add them to the global list
+            all_documents.extend(docs)
+
+    return all_documents
 
 
 def load_pdf(file_path):
@@ -144,7 +163,10 @@ def load_txt(file_path):
 
 def load_links(file_path, skip_sources):
     """
-    Load all video links from a .links file, but skip links that already exist in DB.
+    Load all video links from a .links file (e.g. 'data/cs200/videos.links').
+    We skip a link if that link itself is in skip_sources.
+    The chunk's source is the .links file path
+    (so chunk IDs eventually become e.g. 'data/cs200/videos.links/https://youtube.com/watch?v=xyz:0:0').
     """
     print(f"Attempting to load video links from: {file_path}")
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -152,16 +174,26 @@ def load_links(file_path, skip_sources):
 
     all_documents = []
     for link in links:
-        # If link (the URL) is already processed, skip it
+        # If the link is already processed, skip it
         if link in skip_sources:
             print(f"Skipping already processed link: {link}")
             continue
 
-        all_documents.extend(load_video(link))  # Process each video link
+        # Each link is transcribed, returned as a Document with metadata["source"] = file_path
+        # We'll store the link in metadata["video_url"] for special chunk ID creation
+        all_documents.extend(load_video(video_url=link, local_file_path=file_path))
+
     return all_documents
 
 
-def load_video(video_url):
+def load_video(video_url, local_file_path=None):
+    """
+    Fetch an audio URL for 'video_url' (e.g. YouTube) via yt-dlp, then transcribe it.
+    The returned Document has:
+      metadata["source"] = local_file_path (e.g. data/cs200/videos.links)
+      metadata["video_url"] = video_url (the actual link)
+    chunk_id becomes 'data/cs200/videos.links/https://youtube.com/watch?v=xyz:0:0'
+    """
     print(f"Attempting to get transcript from video: {video_url}")
 
     # Use yt-dlp to extract audio URL without downloading
@@ -179,15 +211,22 @@ def load_video(video_url):
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         audio_url = result.stdout.strip()
         print(f"Audio URL fetched: {audio_url}")
-        return transcribe_audio_from_url(audio_url, source=video_url)
+        return transcribe_audio_from_url(audio_url, source=local_file_path, video_url=video_url)
     except subprocess.CalledProcessError as e:
         print(f"Error fetching audio URL: {e}")
         return []
 
 
-def transcribe_audio_from_url(audio_url, source,
+def transcribe_audio_from_url(audio_url, source, video_url,
                               temp_audio_file="temp_audio.webm",
                               converted_audio_file="temp_audio.wav"):
+    """
+    Downloads the audio from 'audio_url' -> convert to WAV -> transcribe with faster-whisper.
+    The Document's metadata:
+      - "source": e.g. data/cs200/videos.links
+      - "video_url": the actual link
+    Final chunk ID: data/cs200/videos.links/https://youtube.com/watch?v=xyz:page:chunk_index
+    """
     print(f"Downloading and transcribing audio from URL: {audio_url}")
 
     try:
@@ -215,7 +254,13 @@ def transcribe_audio_from_url(audio_url, source,
         os.remove(converted_audio_file)
 
         # Create and return a Document
-        return [Document(page_content=transcript, metadata={"source": source})]
+        return [Document(
+            page_content=transcript,
+            metadata={
+                "source": source,      # e.g. data/cs200/videos.links
+                "video_url": video_url # actual link
+            }
+        )]
     except subprocess.CalledProcessError as e:
         print(f"Error processing audio: {e}")
         return []
@@ -257,20 +302,31 @@ def add_to_chroma(chunks: list[Document], db):
         print("✅ No new documents to add")
 
 
-
 def calculate_chunk_ids(chunks):
     """
-    Creates IDs like: source:page:chunk_index
-      e.g. data/monopoly.pdf:6:2
-           https://youtube.com/video?v=xyz:0:0
+    Creates IDs like: 
+      - data/cs200/monopoly.pdf:6:2
+      - data/cs200/videos.links/https://youtube.com/watch?v=xyz:0:0
+      - https://youtube.com/watch?v=xyz:0:0
+    We append :page:chunk_index at the end.
     """
     last_page_id = None
     current_chunk_index = 0
 
     for chunk in chunks:
-        source = chunk.metadata.get("source", "unknown_source")
+        # The base source (file path or unknown_source)
+        base_source = chunk.metadata.get("source", "unknown_source")
         page = chunk.metadata.get("page", "0")
-        current_page_id = f"{source}:{page}"
+        video_link = chunk.metadata.get("video_url")
+
+        # If there's a video link, we want the chunk ID to look like:
+        #    data/cs200/videos.links/https://youtube.com/watch?v=xyz:page:chunk_index
+        if video_link:
+            # Combine the base_source with the video link
+            current_page_id = f"{base_source}/{video_link}:{page}"
+        else:
+            # Normal case
+            current_page_id = f"{base_source}:{page}"
 
         if current_page_id == last_page_id:
             current_chunk_index += 1

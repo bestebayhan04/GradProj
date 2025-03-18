@@ -8,6 +8,8 @@ import Markdown from 'react-markdown';
 const ChatPage = () => {
 
   const path =useLocation().pathname
+
+  
   const chatId = path.split("/").pop()
 
   const { isPending, error, data } = useQuery({

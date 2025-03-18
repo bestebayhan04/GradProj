@@ -1,4 +1,3 @@
-
 import argparse
 import sys
 import os
@@ -13,16 +12,14 @@ from llama_cpp import Llama
 from dotenv import load_dotenv
 from get_embedding_function import get_embedding_function
 
-# Enable Metal GPU acceleration for Ollama on Mac
+# Enable Metal GPU acceleration for Ollama on Mac 
 os.environ["OLLAMA_ACCELERATOR"] = "metal"
+
 # Load environment variables from .env file
 load_dotenv()
 
 # Retrieve the API key from environment variables
 PERSPECTIVE_API_KEY = os.getenv('PERSPECTIVE_API_KEY')
-
-#print(f"🔑 API Key Loaded: {PERSPECTIVE_API_KEY}")
-
 
 CHROMA_PATH = "chroma"
 
@@ -39,21 +36,21 @@ Answer the question based on the above context: {question}
 # Define the Perspective API endpoint
 PERSPECTIVE_API_URL = "https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze"
 
+
 def is_query_valid(query: str) -> bool:
+    # If API key is missing, skip the check entirely
     if not PERSPECTIVE_API_KEY:
-        #print("❌ API key is not set. Please check your .env file.")
-        return True  # Allow queries if API key is missing to prevent blocking
+        return True
 
     headers = {
         "Content-Type": "application/json"
     }
 
-    # Prepare the request payload
     data = {
         "comment": {"text": query, "type": "PLAIN_TEXT"},
         "languages": ["en"],
         "requestedAttributes": {"TOXICITY": {}},
-        "doNotStore": True  # Ensures that the API does not store the comment
+        "doNotStore": True
     }
 
     try:
@@ -65,93 +62,145 @@ def is_query_valid(query: str) -> bool:
         response.raise_for_status()
         result = response.json()
     except requests.RequestException as e:
-        #print(f"❌ Error communicating with Perspective API: {e}")
-        return True  # Allow queries if there's an error with the API request
+        # If there's a request error, allow the query by default
+        sys.stderr.write(f"❌ Error communicating with Perspective API: {e}\n")
+        return True
 
-    # ✅ Extract the toxicity score safely
+    # Extract toxicity score
     try:
-        toxicity_score = result.get('attributeScores', {}).get('TOXICITY', {}).get('summaryScore', {}).get('value', 0)
+        toxicity_score = result.get('attributeScores', {}) \
+                              .get('TOXICITY', {}) \
+                              .get('summaryScore', {}) \
+                              .get('value', 0)
         sys.stderr.write(f"🔹 Query Toxicity Score: {toxicity_score}\n")
     except Exception as e:
-        #print(f"❌ Unexpected error parsing response: {e}")
-        return True  # Allow queries if response format is unexpected
+        sys.stderr.write(f"❌ Unexpected error parsing response: {e}\n")
+        return True
 
-    # Define a threshold for toxicity
     TOXICITY_THRESHOLD = 0.7
-
-    # Determine if the query is safe
     is_safe = toxicity_score < TOXICITY_THRESHOLD
-    sys.stderr.write(f"🔹 Query Classification: {'SAFE' if is_safe else 'OFFENSIVE'}")
-
+    sys.stderr.write(f"🔹 Query Classification: {'SAFE' if is_safe else 'OFFENSIVE'}\n")
     return is_safe
 
+
 def main():
-    # Create CLI.
+    # Create CLI arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("query_text", type=str, help="The query text.")
+    parser.add_argument(
+        "--course",
+        type=str,
+        default=None,
+        help="Specify a course name to filter the search results."
+    )
     args = parser.parse_args()
+
     query_text = args.query_text
-    #print(f"Received query: {query_text}")  # Log the received query
-    query_rag(query_text)
+    course_name = args.course
+        
+    sys.stderr.write(f"🔹 Query received: '{query_text}' (Course: {course_name if course_name else 'No filter'})")
 
 
-def query_rag(query_text: str):
+    # Perform the RAG-based query
+    query_rag(query_text, course_name)
 
-    # Check for unethical or abusive language using the model
+def get_youtube_title(video_url):
+    """
+    Fetches the title of a YouTube video given its URL.
+    Uses YouTube's oEmbed API (no API key required).
+    """
+    try:
+        response = requests.get(f"https://www.youtube.com/oembed?url={video_url}&format=json")
+        if response.status_code == 200:
+            return response.json().get("title", "Unknown Video")
+    except requests.RequestException:
+        pass
+    return "Unknown Video"
+
+
+def query_rag(query_text: str, course_name: str = None):
+    # 1. Check for unethical or abusive language
     if not is_query_valid(query_text):
         response = "The question you asked is not ethically appropriate. Please rewrite it respectfully."
-        print(response)
+        sys.stderr.write(response)
         return response
     
     # Debug: Check if CHROMA_PATH exists
-    print(f"Checking Chroma path: {os.path.abspath(CHROMA_PATH)}")
-    print(f"Chroma directory exists: {os.path.exists(CHROMA_PATH)}")
+    sys.stderr.write(f"Checking Chroma path: {os.path.abspath(CHROMA_PATH)}")
+    sys.stderr.write(f"Chroma directory exists: {os.path.exists(CHROMA_PATH)}")
     
+    sys.stderr.write(f"🟢 Searching for '{query_text}' in course: '{course_name if course_name else 'ALL COURSES'}'")
+
     try:
-        # Prepare the DB.
+        # 2. Prepare the DB
         embedding_function = get_embedding_function()
         db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
         
         # Debug: Print collection info
-        print(f"Collection name: {db._collection.name}")
-        print(f"Collection count: {db._collection.count()}")
+        sys.stderr.write(f"Collection name: {db._collection.name}")
+        sys.stderr.write(f"Collection count: {db._collection.count()}")
         
-        # Search the DB.
-        print(f"Searching for: {query_text}")
-        results = db.similarity_search_with_score(query_text, k=10)
-        print(f"Found {len(results)} results")
+        # 3. Search the DB with optional course filter
+        if course_name:
+            sys.stderr.write(f"Searching for '{query_text}' in course: {course_name}")
+            results = db.similarity_search_with_score(
+                query_text,
+                k=10,
+                filter={"course": course_name}
+            )
+        else:
+            sys.stderr.write(f"Searching for: {query_text} (no course filter)")
+            results = db.similarity_search_with_score(query_text, k=10)
+
+        sys.stderr.write(f"Found {len(results)} results")
         
-        # Debug: Print raw results
+        # 4. Debug: Print raw results
         for idx, (doc, score) in enumerate(results):
-            print(f"\nResult {idx + 1}:")
-            print(f"Score: {score}")
-            print(f"Content: {doc.page_content[:200]}...")
-            print(f"Metadata: {doc.metadata}")
+            sys.stderr.write(f"\nResult {idx + 1}:")
+            sys.stderr.write(f"Score: {score}")
+            sys.stderr.write(f"Content: {doc.page_content[:200]}...")
+            sys.stderr.write(f"Metadata: {doc.metadata}")
         
-        # Filter results
+        # 5. Filter results by a minimal similarity threshold
         filtered_results = [doc for doc, score in results if score > 0.4]
-        print(f"After filtering, have {len(filtered_results)} relevant results")
+        sys.stderr.write(f"After filtering, have {len(filtered_results)} relevant results")
         
         if not filtered_results:
-            response = "No relevant information found in the database."
-            print(f"Response: {response}\n Sources: []")
+            response = (
+                f"No relevant information found in the database"
+                f"{f' for the {course_name} course' if course_name else ''}."
+            )
+            sys.stderr.write(f"Response: {response}\nSources: []")
             return response
             
-        # Prepare context for the model
+        # 6. Prepare context for the model
         context_text = "\n\n---\n\n".join([doc.page_content for doc in filtered_results])
         prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
         prompt = prompt_template.format(context=context_text, question=query_text)
         
-        # Get response from model
-        #model = OllamaLLM(model="mistral")
+        # 7. Get response from model
+        # model = OllamaLLM(model="mistral")
         model = OllamaLLM(model="llama3.1:8b")
-
         response_text = model.invoke(prompt)
         
-        # Format sources
+        # 8. Format sources
         sources = [doc.metadata.get("source", "Unknown") for doc in filtered_results]
-        print(f"Response: {response_text}\n Sources: {sources}")
-        return response_text
+        print(f"-> {response_text}\n")
+
+        # Print unique sources
+        unique_sources = list(set([
+            f"{os.path.basename(doc.metadata.get('source', 'Unknown'))}"
+            + (f" (p.{doc.metadata['page']})" if doc.metadata.get('page') else "")  # ✅ Only add page if it's a PDF
+            if not doc.metadata.get("video_url")  # ✅ If not a video, process normally
+            else f"{get_youtube_title(doc.metadata.get('video_url'))} (Video)"  # ✅ Get video title instead of raw link
+            for doc in filtered_results
+        ]))
+        
+        #unique_sources = list(set([doc.metadata.get("source", "Unknown") for doc in filtered_results]))
+        print(f"Sources: {unique_sources}")
+        
+
+        return response_text.strip() 
         
     except Exception as e:
         print(f"Error in query_rag: {str(e)}")
@@ -159,8 +208,4 @@ def query_rag(query_text: str):
 
 
 if __name__ == "__main__":
-    #print(f"Current working directory: {os.getcwd()}")
     main()
-
-
-

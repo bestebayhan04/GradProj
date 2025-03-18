@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom"; // Import Link
 import "./adminPage.css";
 
 const AdminPage = () => {
@@ -150,6 +151,29 @@ const handleAddVideoLink = async () => {
   }
 };
 
+const handlePopulateDatabase = async () => {
+  try {
+    console.log("🚀 Populating database...");
+
+    const response = await fetch("http://localhost:5137/api/populate-database", {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ Database populated:", result.logs);
+      alert("✅ Database populated successfully!");
+    } else {
+      console.error("❌ Failed to populate database.");
+      alert("❌ Failed to populate database. Check the console.");
+    }
+  } catch (error) {
+    console.error("❌ Error populating database:", error);
+    alert("❌ Error populating database. Check the console.");
+  }
+};
+
+
 
   // **🔹 Handle File Removal**
   const handleRemoveVideoLink = async (link, course) => {
@@ -232,6 +256,9 @@ const handleRemoveFile = async (fileName) => {
               <option key={index} value={course}>{course}</option>
             ))}
           </select>
+          <div className="right-tab">
+            <Link to="/dashboard" className="chat-button">Chat</Link>
+          </div>
         </div>
 
         {activeTab === "docs" && (
@@ -347,13 +374,20 @@ const handleRemoveFile = async (fileName) => {
                 <p className="no-videos">No video links available.</p>
               )}
             </ul>
+          
 
 
 
           </div>
         )}
+      {/* 🔹 Populate Database Button */}
+      <button className="populate-db-btn" onClick={handlePopulateDatabase}>
+            Upload
+      </button>
+
 
       </div>
+      
     </div>
   );
 };

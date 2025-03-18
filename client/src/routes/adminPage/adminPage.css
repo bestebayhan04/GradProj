@@ -312,3 +312,71 @@
   margin-bottom: 20px;
 
 }
+
+
+.tabNavigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.left-tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.right-tab {
+  margin-left: auto;
+}
+
+.chat-button {
+  padding: 8px 16px;
+  background-color: #8946ed;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  font-weight: bold;
+}
+
+.chat-button:hover {
+  background-color: #500c8b;
+}
+
+/* 🔹 Elegant Populate Database Button */
+/* 🔹 Elegant Populate Database Button - Aligned to Right */
+.populate-db-btn {
+  background: linear-gradient(135deg, #ad82da, #88a5d8); /* Beautiful gradient */
+  color: white;
+  font-size: 1rem;
+  font-weight: bold;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+  margin-top: 20px;
+  margin-left: auto; /* Push it to the right */
+  margin-right: 20px; /* Add some spacing from the right edge */
+}
+
+/* 🔹 Hover & Click Effects */
+.populate-db-btn:hover {
+  background: linear-gradient(135deg, #a677d8, #7194d0);
+  transform: scale(1.05); /* Slightly enlarge on hover */
+  box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.3);
+}
+
+.populate-db-btn:active {
+  transform: scale(0.98); /* Slightly shrink on click */
+}
+
+.populate-db-btn img {
+  width: 20px;
+  height: 20px;
+}

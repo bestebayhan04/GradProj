@@ -121,7 +121,57 @@ app.post("/api/upload/:course", upload.array("files"), async (req, res) => {
    // console.log(userId)
    // res.send("Success");
   //});
-  
+// ✅ API to Trigger populate_database.py from Admin Page
+app.post("/api/populate-database", async (req, res) => {
+    console.log("🚀 Running populate_database.py...");
+
+    // Define the base directory where your script is located
+    const baseDir = path.resolve(__dirname, ".."); 
+    const pythonPath = "python3"; // Change if needed
+    const scriptPath = path.join(baseDir, "populate_database.py");
+
+    // Spawn the Python process
+    const pythonProcess = spawn(pythonPath, [scriptPath]);
+
+    let responseData = "";
+    let errorData = "";
+
+    // Collect stdout
+    pythonProcess.stdout.on("data", (data) => {
+        console.log("Python stdout:", data.toString());
+        responseData += data.toString();
+    });
+
+    // Collect stderr
+    pythonProcess.stderr.on("data", (data) => {
+        console.error("Python stderr:", data.toString());
+        errorData += data.toString();
+    });
+
+    // Handle process exit
+    pythonProcess.on("close", (code) => {
+        console.log("Python process closed with code:", code);
+        
+        if (code === 0) {
+            console.log("✅ Database populated successfully!");
+            return res.status(200).json({ success: true, message: "Database populated successfully!", logs: responseData });
+        } else {
+            console.error("❌ Error populating database.");
+            return res.status(500).json({ success: false, message: "Error populating database!", error: errorData });
+        }
+    });
+
+    // If the spawn itself fails
+    pythonProcess.on("error", (error) => {
+        console.error("❌ Failed to start Python process:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to start Python process",
+            error: error.message
+        });
+    });
+});
+
 
 app.post("/api/chats", ClerkExpressRequireAuth(),async (req, res) => {
     const userId = req.auth.userId;
@@ -319,7 +369,7 @@ app.get("/api/courses/:course/files", async (req, res) => {
 
         // Read files inside the selected course directory
         const files = fs.readdirSync(coursePath)
-            .filter(file => file.endsWith(".pdf") || file.endsWith(".docx") || file.endsWith(".pptx") || file.endsWith(".txt"))
+            .filter(file => file.endsWith(".pdf") || file.endsWith(".docx") || file.endsWith(".doc") ||file.endsWith(".pptx") || file.endsWith(".txt"))
             .map(file => ({
                 name: file,
                 path: `data/${course}/${file}`
@@ -653,83 +703,107 @@ app.use((err, req, res, next) => {
   })
 
 app.post("/api/rag-query", ClerkExpressRequireAuth(), async (req, res) => {
-    const { query } = req.body;
-    console.log('Received RAG query:', query);
+// 1) Extract `query` and optionally `course` from the request body
+const { query, course } = req.body;
+console.log("🟡 Received RAG query:", query, "for course:", course || "No course selected");
 
-    try {
-        const baseDir = path.resolve(__dirname, '..');
-        const pythonPath = path.join(baseDir, 'new_one', 'bin', 'python');
-        const queryDataPath = path.join(baseDir, 'query_data.py');
-        const chromaPath = path.join(baseDir, 'chroma');
+try {
+    // Adjust these paths to match your setup
+    const baseDir = path.resolve(__dirname, "..");
+    const pythonPath = path.join(baseDir, "new_one", "bin", "python");
+    const queryDataPath = path.join(baseDir, "query_data.py");
+    const chromaPath = path.join(baseDir, "chroma");
 
-        console.log('Executing Python script:', pythonPath, queryDataPath);
-        
-        const pythonProcess = spawn(pythonPath, [queryDataPath, query], {
-            env: { ...process.env, CHROMA_PATH: chromaPath },
-            cwd: baseDir
-        });
-        let responseData = '';
-        let errorData = '';
+    // 2) Build the arguments array
+    // First argument: path to the Python script
+    // Second argument: the user’s query text
+    const args = [queryDataPath, query];
 
-        pythonProcess.stdout.on('data', (data) => {
-            console.log('Python stdout:', data.toString());
-            responseData += data.toString();
-        });
+    // If the client provided a course, add "--course <course>"
+    if (course) {
+        args.push("--course", course);
+    }
 
-        pythonProcess.stderr.on('data', (data) => {
-            console.error('Python stderr:', data.toString());
-            errorData += data.toString();
-        });
+    console.log("Executing Python script:", pythonPath, args);
 
-        pythonProcess.on('close', (code) => {
-            console.log('Python process closed with code:', code);
-            if (code !== 0) {
-                console.error('Python process error:', errorData);
-                return res.status(500).json({
-                    error: 'Error processing RAG query',
-                    details: errorData
-                });
-            }
-            
-            try {
-                const responseMatch = responseData.match(/Response: ([\s\S]*?)\n Sources:/);
-                const sourcesMatch = responseData.match(/Sources: \[(.*)\]/);
+    // 3) Spawn the Python process
+    const pythonProcess = spawn(pythonPath, args, {
+    env: { ...process.env, CHROMA_PATH: chromaPath },
+    cwd: baseDir
+    });
 
-                // Replace single quotes with double quotes for JSON parsing
-                const sourcesString = sourcesMatch ? `[${sourcesMatch[1]}]`.replace(/'/g, '"') : '[]';
+    let responseData = "";
+    let errorData = "";
 
-                const response = {
-                    answer: responseMatch ? responseMatch[1].trim() : responseData,
-                    sources: JSON.parse(sourcesString)
-                };
-                
-                console.log('Sending response:', response);
-                res.json(response);
-            } catch (error) {
-                console.error('Error parsing Python response:', error);
-                res.status(500).json({
-                    error: 'Error parsing Python response',
-                    details: error.message,
-                    rawResponse: responseData
-                });
-            }
-        });
+    // Collect stdout
+    pythonProcess.stdout.on("data", (data) => {
+    console.log("Python stdout:", data.toString());
+    responseData += data.toString();
+    });
 
-        pythonProcess.on('error', (error) => {
-            console.error('Failed to start Python process:', error);
-            res.status(500).json({
-                error: 'Failed to start Python process',
-                details: error.message
-            });
-        });
-    } catch (err) {
-        console.error('Server error:', err);
-        res.status(500).json({
-            error: 'Error processing RAG query',
-            details: err.message
+    // Collect stderr
+    pythonProcess.stderr.on("data", (data) => {
+    console.error("Python stderr:", data.toString());
+    errorData += data.toString();
+    });
+
+    // When the Python process finishes
+    pythonProcess.on("close", (code) => {
+    console.log("Python process closed with code:", code);
+    if (code !== 0) {
+        console.error("Python process error:", errorData);
+        return res.status(500).json({
+        error: "Error processing RAG query",
+        details: errorData
         });
     }
+
+    try {
+        // 4) Extract the "Response" and "Sources" from the Python stdout
+        const responseMatch = responseData.match(/Response: ([\s\S]*?)\n Sources:/);
+        const sourcesMatch = responseData.match(/Sources: \[(.*)\]/);
+
+        // The sources come as e.g. ["source1", "source2"]
+        // so we convert single quotes to double quotes for valid JSON
+        const sourcesString = sourcesMatch
+        ? `[${sourcesMatch[1]}]`.replace(/'/g, '"')
+        : "[]";
+
+        const response = {
+        answer: responseMatch ? responseMatch[1].trim() : responseData,
+        sources: JSON.parse(sourcesString)
+        };
+
+        console.log("Sending response:", response);
+        res.json(response);
+    } catch (error) {
+        console.error("Error parsing Python response:", error);
+        res.status(500).json({
+        error: "Error parsing Python response",
+        details: error.message,
+        rawResponse: responseData
+        });
+    }
+    });
+
+    // If the spawn itself fails
+    pythonProcess.on("error", (error) => {
+    console.error("Failed to start Python process:", error);
+    res.status(500).json({
+        error: "Failed to start Python process",
+        details: error.message
+    });
+    });
+
+} catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({
+    error: "Error processing RAG query",
+    details: err.message
+    });
+}
 });
+  
 
 app.listen(port, () =>  {
     connect()

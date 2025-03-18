@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import model from "../../lib/gemini";
 import Markdown from "react-markdown";
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import eventEmitter from '../../lib/eventEmitter'; // Import event emitter
 
 const NewPrompt = ({ data }) => {
   const [question, setQuestion] = useState("");
@@ -10,6 +11,8 @@ const NewPrompt = ({ data }) => {
   const [selectedModel, setSelectedModel] = useState("gemini");
   const [isThinking, setIsThinking] = useState(false);
   const [sources, setSources] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(""); // Store selected course
+
 
   let chat;
   if (selectedModel === "gemini") {
@@ -23,12 +26,28 @@ const NewPrompt = ({ data }) => {
 
   const endRef = useRef(null);
   const formRef = useRef(null);
+  const queryClient = useQueryClient();
+
 
   useEffect(() => {
     endRef.current.scrollIntoView({ behavior: "smooth" });
   }, [data, question, answer]);
 
-  const queryClient = useQueryClient();
+  // ✅ Check if selectedCourse is updating
+ 
+  useEffect(() => {
+    const handleCourseChange = (course) => {
+      console.log("🟢 Received course change in NewPrompt:", course); // ✅ Debugging
+      setSelectedCourse(course);
+    };
+  
+    eventEmitter.subscribe("courseChanged", handleCourseChange);
+  
+    return () => {
+      eventEmitter.unsubscribe("courseChanged", handleCourseChange);
+    };
+  }, []);
+
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -49,17 +68,24 @@ const NewPrompt = ({ data }) => {
     onError: (err) => console.log(err),
   });
 
-  // ✅ Fixed handleRagQuery to dynamically update answer
+  // ✅ Use selectedCourse to do a RAG query
   const handleRagQuery = async (text) => {
+    if (!selectedCourse || selectedCourse.trim() === "") {
+      console.warn("⚠️ No course selected - Cannot send query.");
+      setAnswer("⚠️ Please select a course before querying.");
+      return;
+    }
+
+    console.log(`📤 Sending RAG query: "${text}" for course: "${selectedCourse}"`);
+
     try {
-      console.log('Sending RAG query:', text);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/rag-query`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ query: text, course: selectedCourse }),
       });
 
       if (!response.ok) {
@@ -67,23 +93,19 @@ const NewPrompt = ({ data }) => {
       }
 
       const data = await response.json();
-      console.log('Received RAG response:', data);
-      
+      console.log("✅ Received RAG response:", data);
+
       if (!data.answer) {
-        throw new Error('No answer received from RAG');
+        throw new Error("No answer received from RAG.");
       }
 
-      setAnswer(data.answer);  // ✅ Only setting the answer
-      console.log('Updated state for RAG:', data.answer);  // ✅ Only logging the answer
-
+      setAnswer(data.answer);
     } catch (error) {
-      console.error('RAG query error:', error);
-      setAnswer('Error processing your query: ' + error.message);
+      console.error("❌ RAG Query Error:", error);
+      setAnswer("❌ Error processing your query: " + error.message);
     }
-};
+  };
 
-
-  // ✅ Restored old streaming behavior in add()
   const add = async (text, isInitial) => {
     if (!isInitial) setQuestion(text);
     console.log(`Selected Model: ${selectedModel}`);
@@ -100,13 +122,12 @@ const NewPrompt = ({ data }) => {
         let accumulatedText = "";
 
         switch (selectedModel) {
-         
           default:
             if (!chat) throw new Error("Gemini chat model is not initialized properly.");
             const result = await chat.sendMessageStream(text);
             for await (const chunk of result.stream) {
               accumulatedText += chunk.text();
-              setAnswer(accumulatedText); // ✅ Dynamically update answer like old code
+              setAnswer(accumulatedText); 
             }
         }
 

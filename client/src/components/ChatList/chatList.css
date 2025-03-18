@@ -71,4 +71,35 @@
     .deleteChatBtn:hover {
         color: red;
     }
+
+    .courseSelect {
+        width: 80%;
+        max-width: 250px; /* Set a max width */
+        padding: 10px;
+        border: 2px solid #e3e9ef; /* Primary blue border */
+        border-radius: 8px;
+        background-color: #f8f9fa; /* Light gray background */
+        font-size: 14px;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 10px;
+        margin-bottom: 15px;
+      }
+      
+      /* Dropdown hover & focus effects */
+      .courseSelect:hover,
+      .courseSelect:focus {
+        border-color: #7b96b2;
+        background-color: #ffffff; /* White background on focus */
+      }
+      
+      /* Disable dropdown when loading */
+      .courseSelect:disabled {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+        border-color: #ccc;
+        color: #6c757d;
+      }
+      
 }
