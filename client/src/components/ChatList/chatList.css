@@ -68,6 +68,32 @@
         margin-left: 10px;
     }
 
+    .button {
+        background-color: #0e0e12;
+        color: #fff;
+        border: 2px solid #575772;
+        border-radius: 10px;
+        width: 210px;
+        max-height: 45px; /* or try 35px if you want slimmer */
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 600;
+        transition: background-color 0.2s ease-in-out;
+        margin-top: 10px;
+        
+        padding: 0; /* removes added space */
+        
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+
+    .button:hover{
+
+        color: #fff;
+    }
+
     .deleteChatBtn:hover {
         color: red;
     }
