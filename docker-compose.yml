@@ -1,0 +1,41 @@
+
+services:
+  frontend:
+    build: ./client
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_URL=http://localhost:5137
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "5137:5137"
+    volumes:
+      - ./data:/app/data
+      - ./chroma:/app/chroma
+    depends_on:
+      - mongodb
+      - chroma
+    environment:
+      - PORT=5137
+      - MONGO=mongodb://mongodb:27017/chatapp
+      - CHROMA_PATH=/app/chroma
+      - CLIENT_URL=http://localhost:5173
+
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8000:8000"
+
+volumes:
+  mongo_data:
