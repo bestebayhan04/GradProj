@@ -220,14 +220,20 @@ app.post("/api/chats", ClerkExpressRequireAuth(),async (req, res) => {
 });
 
 app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
-    const userId = req.auth.userId;
+    const userId = req.auth?.userId;
+    console.log("🔍 userId:", userId);
   
     try {
       const userChats = await UserChats.find({ userId });
-
+      console.log("🗂️ userChats:", userChats);
+  
+      if (!userChats?.length) {
+        return res.status(200).send([]); // Avoids accessing undefined index
+      }
+  
       res.status(200).send(userChats[0].chats);
     } catch (err) {
-      console.log(err);
+      console.error("🔥 Error fetching userchats:", err);
       res.status(500).send("Error fetching userchats!");
     }
   });

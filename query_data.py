@@ -102,7 +102,9 @@ def main():
 
 
     # Perform the RAG-based query
-    query_rag(query_text, course_name)
+    response = query_rag(query_text, course_name)
+    if response:
+        print(response)
 
 def get_youtube_title(video_url):
     """
@@ -121,7 +123,7 @@ def get_youtube_title(video_url):
 def query_rag(query_text: str, course_name: str = None):
     # 1. Check for unethical or abusive language
     if not is_query_valid(query_text):
-        response = "The question you asked is not ethically appropriate. Please rewrite it respectfully."
+        response = "❗️ The question you asked is not ethically appropriate. Please rewrite it respectfully."
         sys.stderr.write(response)
         return response
     
@@ -185,7 +187,7 @@ def query_rag(query_text: str, course_name: str = None):
         
         # 8. Format sources
         sources = [doc.metadata.get("source", "Unknown") for doc in filtered_results]
-        print(f"-> {response_text}\n")
+        #print(f"-> {response_text}\n")
 
         # Print unique sources
         unique_sources = list(set([
@@ -197,7 +199,9 @@ def query_rag(query_text: str, course_name: str = None):
         ]))
         
         #unique_sources = list(set([doc.metadata.get("source", "Unknown") for doc in filtered_results]))
-        print(f"Sources: {unique_sources}")
+        #print(f"Sources: {unique_sources}")
+        return f"-> {response_text.strip()}\nSources: {unique_sources}"
+
         
 
         return response_text.strip() 

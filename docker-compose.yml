@@ -14,7 +14,7 @@ services:
     ports:
       - "5137:5137"
     volumes:
-      - ./data:/app/data
+      - ./data:/data
       - ./chroma:/app/chroma
     depends_on:
       - mongodb
